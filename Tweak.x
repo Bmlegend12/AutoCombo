@@ -1,83 +1,30 @@
-#import <UIKit/UIKit.h>
+#import <substrate.h>
 
-@interface DKComboManager : NSObject
-@property (nonatomic, strong) UIWindow *overlayWindow;
-@property (nonatomic, strong) UIButton *comboBtn;
-@property (nonatomic, assign) BOOL isRunning;
-+ (instancetype)shared;
-- (void)initFloatingUI;
-@end
+// Khai báo lại hàm gốc
+void (*orig_FUN_100233c58)(long param_1);
 
-@implementation DKComboManager
+// Biến đếm thứ tự Combo DK (Skill 1 -> 2 -> 3)
+int combo_step = 0;
+int dk_skills[] = {19, 20, 22}; // Thay ID Skill chuẩn của DK vào đây
 
-+ (instancetype)shared {
-    static DKComboManager *inst = nil;
-    static dispatch_once_t onceToken;
-    dispatch_once(&onceToken, ^{
-        inst = [[DKComboManager alloc] init];
-    });
-    return inst;
+void hook_FUN_100233c58(long param_1) {
+    // Nếu bật Auto Combo
+    if (param_1 != 0 && *(int *)(param_1 + 0x20) != -1) { 
+        
+        // Ghi đè Skill ID mong muốn vào offset 0x24
+        *(int *)(param_1 + 0x24) = dk_skills[combo_step];
+        
+        // Chuyển bước combo tiếp theo
+        combo_step = (combo_step + 1) % 3;
+    }
+
+    // Gọi lại hàm gốc để game xử lý đánh
+    orig_FUN_100233c58(param_1);
 }
 
-- (void)initFloatingUI {
-    dispatch_async(dispatch_get_main_queue(), ^{
-        if (self.overlayWindow) return;
-
-        self.overlayWindow = [[UIWindow alloc] initWithFrame:CGRectMake(80, 150, 65, 65)];
-        self.overlayWindow.windowLevel = UIWindowLevelAlert + 2;
-        self.overlayWindow.backgroundColor = [UIColor clearColor];
-
-        self.comboBtn = [UIButton buttonWithType:UIButtonTypeCustom];
-        self.comboBtn.frame = CGRectMake(0, 0, 65, 65);
-        self.comboBtn.backgroundColor = [[UIColor redColor] colorWithAlphaComponent:0.85];
-        [self.comboBtn setTitle:@"COMBO\n1-2-3" forState:UIControlStateNormal];
-        self.comboBtn.titleLabel.numberOfLines = 2;
-        self.comboBtn.titleLabel.textAlignment = NSTextAlignmentCenter;
-        self.comboBtn.titleLabel.font = [UIFont boldSystemFontOfSize:11];
-        self.comboBtn.layer.cornerRadius = 32.5;
-        self.comboBtn.layer.borderWidth = 2.0;
-        self.comboBtn.layer.borderColor = [UIColor yellowColor].CGColor;
-
-        [self.comboBtn addTarget:self action:@selector(startComboProcess) forControlEvents:UIControlEventTouchUpInside];
-        UIPanGestureRecognizer *pan = [[UIPanGestureRecognizer alloc] initWithTarget:self action:@selector(onDrag:)];
-        [self.comboBtn addGestureRecognizer:pan];
-
-        [self.overlayWindow addSubview:self.comboBtn];
-        self.overlayWindow.hidden = NO;
-    });
+%ctor {
+    // Hook vào địa chỉ hàm FUN_100233c58 (Address: 0x100233c58)
+    MSHookFunction((void *)(0x100233c58 + _dyld_get_image_vmaddr_slide(0)), 
+                   (void *)hook_FUN_100233c58, 
+                   (void **)&orig_FUN_100233c58);
 }
-
-- (void)onDrag:(UIPanGestureRecognizer *)pan {
-    CGPoint trans = [pan translationInView:self.overlayWindow];
-    self.overlayWindow.center = CGPointMake(self.overlayWindow.center.x + trans.x, self.overlayWindow.center.y + trans.y);
-    [pan setTranslation:CGPointZero inView:self.overlayWindow];
-}
-
-- (void)startComboProcess {
-    if (self.isRunning) return;
-    self.isRunning = YES;
-
-    self.comboBtn.backgroundColor = [[UIColor greenColor] colorWithAlphaComponent:0.85];
-
-    dispatch_async(dispatch_get_global_queue(DISPATCH_QUEUE_PRIORITY_DEFAULT, 0), ^{
-        useconds_t delay = 180000; // 180ms delay giua cac skill
-
-        // Executing Skill 1, 2, 3
-        usleep(delay);
-        usleep(delay);
-
-        dispatch_async(dispatch_get_main_queue(), ^{
-            self.comboBtn.backgroundColor = [[UIColor redColor] colorWithAlphaComponent:0.85];
-            self.isRunning = NO;
-        });
-    });
-}
-
-@end
-
-%hook UIApplication
-- (void)applicationDidBecomeActive:(id)application {
-    %orig;
-    [[DKComboManager shared] initFloatingUI];
-}
-%end
