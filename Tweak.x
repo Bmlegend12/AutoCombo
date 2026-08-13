@@ -1,46 +1,54 @@
-#import <mach-o/dyld.h>
-#import <substrate.h>
 #import <UIKit/UIKit.h>
 
 // ==========================================
-// 1. HOOK LOGIC GAME (DK AUTO COMBO)
+// 1. HELPER GIẢ LẬP THAO TÁC BẤM MÀN HÌNH
 // ==========================================
 
-void (*orig_ProcessAttack)(long param_1);
+@interface UITouch (Synthetic)
+- (id)initAtPoint:(CGPoint)point inWindow:(UIWindow *)window;
+- (void)setPhase:(UITouchPhase)phase;
+@end
 
-// Mặc định BẬT
-BOOL isComboEnabled = YES;
-
-// Danh sách ID skill chuẩn của DK MU (Ví dụ các chiêu DK phổ biến: 19, 20, 21, 22, 23, 41, 42, 43, 44)
-// Nếu muốn test xoay chiêu đơn giản, ta xoay giữa các skill chuẩn này
-int dk_combo_chain[] = {19, 20, 21, 22, 23}; 
-int combo_step = 0;
-
-void hook_ProcessAttack(long param_1) {
-    if (isComboEnabled && param_1 != 0) {
-        // Lấy ID skill người dùng vừa bấm trên màn hình (đang nằm ở offset 0x24)
-        int current_pressed_skill = *(int *)(param_1 + 0x24);
-        
-        // Nếu người dùng đang bấm 1 skill hợp lệ (ID > 0)
-        if (current_pressed_skill > 0) {
-            // In log để debug nếu cần, hoặc tự động đổi ID skill theo chuỗi
-            // Bạn có thể chỉnh danh sách ID bên trên cho đúng với bộ Skill bạn đang xếp trên màn hình
-            *(int *)(param_1 + 0x24) = dk_combo_chain[combo_step];
-            combo_step = (combo_step + 1) % (sizeof(dk_combo_chain) / sizeof(int));
+void SimulateTouchAtPoint(CGPoint point) {
+    dispatch_async(dispatch_get_main_queue(), ^{
+        UIWindow *keyWindow = nil;
+        for (UIScene *scene in [UIApplication sharedApplication].connectedScenes) {
+            if (scene.activationState == UISceneActivationStateForegroundActive && 
+                [scene isKindOfClass:[UIWindowScene class]]) {
+                UIWindowScene *windowScene = (UIWindowScene *)scene;
+                for (UIWindow *window in windowScene.windows) {
+                    if (window.isKeyWindow) {
+                        keyWindow = window;
+                        break;
+                    }
+                }
+            }
         }
-    }
-    
-    // Gọi hàm gốc
-    orig_ProcessAttack(param_1);
+        if (!keyWindow) keyWindow = [UIApplication sharedApplication].keyWindow;
+        if (!keyWindow) return;
+
+        // Bắn sự kiện chạm vào UIView ở tọa độ chỉ định
+        UIView *hitView = [keyWindow hitTest:point withEvent:nil];
+        if (hitView) {
+            // Gửi sự kiện Touch Down & Touch Up
+            [hitView touchesBegan:[NSSet setWithObject:[[UITouch alloc] init]] withEvent:nil];
+            dispatch_after(dispatch_time(DISPATCH_TIME_NOW, (int64_t)(0.05 * NSEC_PER_SEC)), dispatch_get_main_queue(), ^{
+                [hitView touchesEnded:[NSSet setWithObject:[[UITouch alloc] init]] withEvent:nil];
+            });
+        }
+    });
 }
 
 // ==========================================
-// 2. TẠO GIAO DIỆN NÚT NỔI
+// 2. QUẢN LÝ OVERLAY UI & VÒNG LẶP COMBO
 // ==========================================
 
 @interface DKComboManager : NSObject
 @property (nonatomic, strong) UIWindow *overlayWindow;
 @property (nonatomic, strong) UIButton *comboButton;
+@property (nonatomic, strong) NSTimer *comboTimer;
+@property (nonatomic, assign) BOOL isRunning;
+@property (nonatomic, assign) int currentStep;
 @end
 
 @implementation DKComboManager
@@ -77,16 +85,15 @@ void hook_ProcessAttack(long param_1) {
             self.overlayWindow = [[UIWindow alloc] initWithFrame:[UIScreen mainScreen].bounds];
         }
 
-        self.overlayWindow.frame = CGRectMake(80, 100, 65, 65);
+        self.overlayWindow.frame = CGRectMake(80, 80, 65, 65);
         self.overlayWindow.windowLevel = UIWindowLevelStatusBar + 1000;
         self.overlayWindow.backgroundColor = [UIColor clearColor];
         self.overlayWindow.hidden = NO;
 
         self.comboButton = [UIButton buttonWithType:UIButtonTypeCustom];
         self.comboButton.frame = CGRectMake(0, 0, 65, 65);
-        // MẶC ĐỊNH BẬT = MÀU XANH
-        self.comboButton.backgroundColor = [[UIColor greenColor] colorWithAlphaComponent:0.85];
-        [self.comboButton setTitle:@"COMBO\nON" forState:UIControlStateNormal];
+        self.comboButton.backgroundColor = [[UIColor redColor] colorWithAlphaComponent:0.85];
+        [self.comboButton setTitle:@"COMBO\nOFF" forState:UIControlStateNormal];
         self.comboButton.titleLabel.font = [UIFont boldSystemFontOfSize:11];
         self.comboButton.titleLabel.numberOfLines = 2;
         self.comboButton.titleLabel.textAlignment = NSTextAlignmentCenter;
@@ -111,36 +118,75 @@ void hook_ProcessAttack(long param_1) {
 }
 
 - (void)toggleCombo {
-    isComboEnabled = !isComboEnabled;
-    if (isComboEnabled) {
+    self.isRunning = !self.isRunning;
+    if (self.isRunning) {
         [self.comboButton setTitle:@"COMBO\nON" forState:UIControlStateNormal];
         self.comboButton.backgroundColor = [[UIColor greenColor] colorWithAlphaComponent:0.85];
+        [self startAutoCombo];
     } else {
         [self.comboButton setTitle:@"COMBO\nOFF" forState:UIControlStateNormal];
         self.comboButton.backgroundColor = [[UIColor redColor] colorWithAlphaComponent:0.85];
+        [self stopAutoCombo];
     }
+}
+
+- (void)startAutoCombo {
+    self.currentStep = 0;
+    // Chạy vòng lặp kích hoạt skill mỗi 0.18 giây
+    self.comboTimer = [NSTimer scheduledTimerWithTimeInterval:0.18 
+                                                        target:self 
+                                                      selector:@selector(executeComboStep) 
+                                                      userInfo:nil 
+                                                       repeats:YES];
+}
+
+- (void)stopAutoCombo {
+    if (self.comboTimer) {
+        [self.comboTimer invalidate];
+        self.comboTimer = nil;
+    }
+}
+
+- (void)executeComboStep {
+    CGRect screenBounds = [UIScreen mainScreen].bounds;
+    CGFloat width = screenBounds.size.width;
+    CGFloat height = screenBounds.size.height;
+
+    // Tọa độ tương đối (% màn hình) của 3 phím Skill cụm dưới bên phải
+    CGPoint skill1 = CGPointMake(width * 0.82, height * 0.85); // Skill xoay kiếm
+    CGPoint skill2 = CGPointMake(width * 0.88, height * 0.72); // Skill đâm
+    CGPoint skill3 = CGPointMake(width * 0.94, height * 0.58); // Skill đập đất
+
+    CGPoint targetPoint;
+    switch (self.currentStep) {
+        case 0:
+            targetPoint = skill1;
+            break;
+        case 1:
+            targetPoint = skill2;
+            break;
+        case 2:
+            targetPoint = skill3;
+            break;
+        default:
+            targetPoint = skill1;
+            break;
+    }
+
+    // Thực thi bấm màn hình tại tọa độ
+    SimulateTouchAtPoint(targetPoint);
+
+    // Chuyển bước Combo tiếp theo (0 -> 1 -> 2 -> 0)
+    self.currentStep = (self.currentStep + 1) % 3;
 }
 
 @end
 
 // ==========================================
-// 3. KHỞI TẠO HOOK
+// 3. THỰC THI KHỞI TẠO TWEAK
 // ==========================================
 
 %ctor {
-    // Lấy Slide ASLR chuẩn của Main Executable
-    uintptr_t slide = _dyld_get_image_vmaddr_slide(0);
-    
-    // Offset chuẩn trong Ghidra (0x100233c58 - 0x100000000)
-    uintptr_t target_offset = 0x233c58;
-    uintptr_t absolute_address = slide + target_offset;
-
-    // Thực hiện MSHook
-    MSHookFunction((void *)absolute_address, 
-                   (void *)hook_ProcessAttack, 
-                   (void **)&orig_ProcessAttack);
-
-    // Bật UI sau 3 giây
     dispatch_after(dispatch_time(DISPATCH_TIME_NOW, (int64_t)(3.0 * NSEC_PER_SEC)), dispatch_get_main_queue(), ^{
         [[DKComboManager sharedInstance] setupUI];
     });
