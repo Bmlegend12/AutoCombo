@@ -102,14 +102,23 @@ void hook_ProcessAttack(long param_1) {
 @end
 
 %ctor {
-    // 1. Hook hàm game
+    // 1. Lấy slide ASLR thực tế của game
     uintptr_t slide = _dyld_get_image_vmaddr_slide(0);
-    MSHookFunction((void *)(0x100233c58 + slide), 
+    
+    // 2. Offset chuẩn của hàm FUN_100233c58 (Đã trừ đi 0x100000000)
+    uintptr_t function_offset = 0x233c58; 
+    
+    // 3. Tính địa chỉ thực tế trên RAM
+    uintptr_t absolute_address = slide + function_offset;
+
+    // 4. Hook hàm
+    MSHookFunction((void *)absolute_address, 
                    (void *)hook_ProcessAttack, 
                    (void **)&orig_ProcessAttack);
 
-    // 2. Chờ 4 giây cho Game tải xong rồi vẽ Nút Nổi
-    dispatch_after(dispatch_time(DISPATCH_TIME_NOW, (int64_t)(4.0 * NSEC_PER_SEC)), dispatch_get_main_queue(), ^{
+    // 5. Hiện Nút Nổi
+    dispatch_after(dispatch_time(DISPATCH_TIME_NOW, (int64_t)(3.0 * NSEC_PER_SEC)), dispatch_get_main_queue(), ^{
         [[DKComboManager sharedInstance] setupUI];
     });
 }
+
