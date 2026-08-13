@@ -7,16 +7,24 @@ on:
 
 jobs:
   build:
-    runs-on: macos-latest
+    runs-on: macos-13
 
     steps:
     - name: Checkout repository
       uses: actions/checkout@v4
 
-    - name: Install Theos
+    - name: Install Dependencies
+      run: |
+        brew install dpkg lz4
+
+    - name: Setup Theos & SDK
       run: |
         git clone --recursive https://github.com/theos/theos.git $HOME/theos
         echo "THEOS=$HOME/theos" >> $GITHUB_ENV
+        curl -LO https://github.com/theos/sdks/archive/master.zip
+        unzip master.zip
+        mv sdks-master/* $HOME/theos/sdks/
+        rm -rf master.zip sdks-master
 
     - name: Build Tweak (.deb)
       run: |
