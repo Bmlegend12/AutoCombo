@@ -7,7 +7,7 @@ on:
 
 jobs:
   build:
-    runs-on: macos-13
+    runs-on: ubuntu-latest
 
     steps:
     - name: Checkout repository
@@ -15,7 +15,8 @@ jobs:
 
     - name: Install Dependencies
       run: |
-        brew install dpkg lz4
+        sudo apt-get update
+        sudo apt-get install -y build-essential checkinstall git make clang libstdc++6 lz4 dpkg
 
     - name: Setup Theos & SDK
       run: |
