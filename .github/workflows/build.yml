@@ -13,8 +13,10 @@ jobs:
     - name: Checkout repository
       uses: actions/checkout@v4
 
-    - name: Setup Theos
-      uses: theos/action-setup@v1.3
+    - name: Install Theos
+      run: |
+        git clone --recursive https://github.com/theos/theos.git $HOME/theos
+        echo "THEOS=$HOME/theos" >> $GITHUB_ENV
 
     - name: Build Tweak (.deb)
       run: |
