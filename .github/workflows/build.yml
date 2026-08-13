@@ -1,0 +1,27 @@
+name: Build Deb Package
+
+on:
+  push:
+    branches: [ main, master, workflows ]
+  workflow_dispatch:
+
+jobs:
+  build:
+    runs-on: macos-13
+
+    steps:
+    - name: Checkout repository
+      uses: actions/checkout@v3
+
+    - name: Setup Theos
+      uses: theos/action-setup@v1
+
+    - name: Build Tweak (.deb)
+      run: |
+        make package FINALPACKAGE=1
+
+    - name: Upload .deb Artifact
+      uses: actions/upload-artifact@v3
+      with:
+        name: DKAutoCombo-deb
+        path: packages/*.deb
