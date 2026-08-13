@@ -1,3 +1,28 @@
+#import <mach-o/dyld.h>
+#import <substrate.h>
+#import <UIKit/UIKit.h>
+
+// Các đoạn code Hook phía dưới của bạn...
+void (*orig_ProcessAttack)(long param_1);
+
+int combo_skills[] = {1, 2, 3}; 
+int current_combo_idx = 0;
+
+void hook_ProcessAttack(long param_1) {
+    if (param_1 != 0 && *(int *)(param_1 + 0x20) != -1) {
+        *(int *)(param_1 + 0x24) = combo_skills[current_combo_idx];
+        current_combo_idx = (current_combo_idx + 1) % 3;
+    }
+    orig_ProcessAttack(param_1);
+}
+
+%ctor {
+    // Lúc này hàm _dyld_get_image_vmaddr_slide đã có header nên sẽ không bị lỗi nữa
+    uintptr_t slide = _dyld_get_image_vmaddr_slide(0);
+    MSHookFunction((void *)(0x100233c58 + slide), 
+                   (void *)hook_ProcessAttack, 
+                   (void **)&orig_ProcessAttack);
+}
 // Mã Hook trực tiếp hàm FUN_100233c58 trong Tweak.x
 #import <substrate.h>
 
