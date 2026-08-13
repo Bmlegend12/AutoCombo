@@ -1,0 +1,9 @@
+Package: com.yourname.dkautocombo
+Name: DK Auto Combo MU
+Depends: mobilesubstrate
+Version: 1.0.0
+Architecture: iphoneos-arm
+Description: Nut noi Auto Combo 1-2-3 cho DK MU-iOS
+Maintainer: YourName
+Author: YourName
+Section: Tweaks
