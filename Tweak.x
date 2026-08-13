@@ -11,26 +11,27 @@
 
 void SimulateTouchAtPoint(CGPoint point) {
     dispatch_async(dispatch_get_main_queue(), ^{
-        UIWindow *keyWindow = nil;
+        UIWindow *targetWindow = nil;
+        
+        // Tìm UIWindowScene và Window đang active chuẩn iOS 13+
         for (UIScene *scene in [UIApplication sharedApplication].connectedScenes) {
             if (scene.activationState == UISceneActivationStateForegroundActive && 
                 [scene isKindOfClass:[UIWindowScene class]]) {
                 UIWindowScene *windowScene = (UIWindowScene *)scene;
                 for (UIWindow *window in windowScene.windows) {
-                    if (window.isKeyWindow) {
-                        keyWindow = window;
+                    if (window.isKeyWindow || window.isVisible) {
+                        targetWindow = window;
                         break;
                     }
                 }
             }
         }
-        if (!keyWindow) keyWindow = [UIApplication sharedApplication].keyWindow;
-        if (!keyWindow) return;
+        
+        if (!targetWindow) return;
 
         // Bắn sự kiện chạm vào UIView ở tọa độ chỉ định
-        UIView *hitView = [keyWindow hitTest:point withEvent:nil];
+        UIView *hitView = [targetWindow hitTest:point withEvent:nil];
         if (hitView) {
-            // Gửi sự kiện Touch Down & Touch Up
             [hitView touchesBegan:[NSSet setWithObject:[[UITouch alloc] init]] withEvent:nil];
             dispatch_after(dispatch_time(DISPATCH_TIME_NOW, (int64_t)(0.05 * NSEC_PER_SEC)), dispatch_get_main_queue(), ^{
                 [hitView touchesEnded:[NSSet setWithObject:[[UITouch alloc] init]] withEvent:nil];
@@ -132,7 +133,6 @@ void SimulateTouchAtPoint(CGPoint point) {
 
 - (void)startAutoCombo {
     self.currentStep = 0;
-    // Chạy vòng lặp kích hoạt skill mỗi 0.18 giây
     self.comboTimer = [NSTimer scheduledTimerWithTimeInterval:0.18 
                                                         target:self 
                                                       selector:@selector(executeComboStep) 
@@ -152,10 +152,10 @@ void SimulateTouchAtPoint(CGPoint point) {
     CGFloat width = screenBounds.size.width;
     CGFloat height = screenBounds.size.height;
 
-    // Tọa độ tương đối (% màn hình) của 3 phím Skill cụm dưới bên phải
-    CGPoint skill1 = CGPointMake(width * 0.82, height * 0.85); // Skill xoay kiếm
-    CGPoint skill2 = CGPointMake(width * 0.88, height * 0.72); // Skill đâm
-    CGPoint skill3 = CGPointMake(width * 0.94, height * 0.58); // Skill đập đất
+    // Tọa độ tương đối của 3 phím Skill cụm dưới bên phải
+    CGPoint skill1 = CGPointMake(width * 0.82, height * 0.85);
+    CGPoint skill2 = CGPointMake(width * 0.88, height * 0.72);
+    CGPoint skill3 = CGPointMake(width * 0.94, height * 0.58);
 
     CGPoint targetPoint;
     switch (self.currentStep) {
@@ -173,10 +173,7 @@ void SimulateTouchAtPoint(CGPoint point) {
             break;
     }
 
-    // Thực thi bấm màn hình tại tọa độ
     SimulateTouchAtPoint(targetPoint);
-
-    // Chuyển bước Combo tiếp theo (0 -> 1 -> 2 -> 0)
     self.currentStep = (self.currentStep + 1) % 3;
 }
 
