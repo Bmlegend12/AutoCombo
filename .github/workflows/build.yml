@@ -7,22 +7,26 @@ on:
 
 jobs:
   build:
-    runs-on: macos-14
+    runs-on: macos-latest
 
     steps:
-    - name: Checkout
+    - name: Checkout repository
       uses: actions/checkout@v4
 
-    - name: Setup Theos
-      uses: theos/setup-theos@v1
-      with:
-        theos-src: 'https://github.com/theos/theos'
+    - name: Setup Theos & SDKs
+      run: |
+        git clone --recursive https://github.com/theos/theos.git $HOME/theos
+        echo "THEOS=$HOME/theos" >> $GITHUB_ENV
+        curl -LO https://github.com/theos/sdks/archive/master.zip
+        unzip -q master.zip
+        mv sdks-master/* $HOME/theos/sdks/
+        rm -rf master.zip sdks-master
 
-    - name: Build Tweak
+    - name: Build Tweak (.deb)
       run: |
         make package FINALPACKAGE=1
 
-    - name: Upload Artifact
+    - name: Upload .deb Artifact
       uses: actions/upload-artifact@v4
       with:
         name: DKAutoCombo-deb
